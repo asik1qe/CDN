@@ -9,71 +9,64 @@ jobs:
   build-test-deploy:
     runs-on: self-hosted
 
-    defaults:
-      run:
-        shell: cmd
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      :: 1. Проверка docker-compose.yaml
       - name: Validate docker-compose.yaml
+        shell: powershell
         run: |
-          echo Validating docker-compose.yaml...
+          Write-Host "Validating docker-compose.yaml..."
           docker compose config
 
-      :: 2. Тестовый деплой для проверки docker-stack.yaml
       - name: Test deploy stack (validation only)
+        shell: powershell
         run: |
-          echo Deploying test stack cdnstack-test...
+          Write-Host "Deploying test stack cdnstack-test..."
           docker stack deploy -c docker-stack.yaml cdnstack-test
-          timeout /t 5 /nobreak >NUL
-          echo Test stack services:
+          Start-Sleep -Seconds 5
           docker stack services cdnstack-test
-          echo Removing test stack...
+          Write-Host "Removing test stack..."
           docker stack rm cdnstack-test
 
-      :: 3. Сборка Docker-образов
       - name: Build images
+        shell: powershell
         run: |
-          echo Building Docker images...
+          Write-Host "Building Docker images..."
           docker compose build
 
-      :: 4. Боевой деплой в Swarm
       - name: Deploy production stack
+        shell: powershell
         run: |
-          echo Deploying production stack...
+          Write-Host "Deploying production stack..."
           docker stack deploy -c docker-stack.yaml cdnstack
 
-      :: 5. Проверка, что нет сервисов с 0 реплик
       - name: Validate Swarm service replicas
+        shell: powershell
         run: |
-          echo Checking replicas...
-          timeout /t 5 /nobreak >NUL
-          docker stack services cdnstack --format "{{.Name}} {{.Replicas}}" > services.txt
-          echo Current services:
-          type services.txt
-          find " 0/" services.txt > bad.txt
-          if %ERRORLEVEL%==0 (
-            echo Some services have 0 running replicas:
-            type bad.txt
-            exit /b 1
-          ) else (
-            echo All services have at least 1 running replica.
-          )
+          Write-Host "Checking replicas..."
+          Start-Sleep -Seconds 5
+          $services = docker stack services cdnstack --format '{{.Name}} {{.Replicas}}'
+          Write-Host $services
+          $bad = $services | Select-String " 0\/"
+          if ($bad) {
+            Write-Error "Some services have missing replicas: $bad"
+            exit 1
+          }
+          Write-Host "All services have correct number of replicas."
 
-      :: 6. HTTP Smoke Test через CDN (load-balancer)
       - name: HTTP Smoke Test
+        shell: powershell
         run: |
-          echo Running HTTP smoke test...
-          timeout /t 5 /nobreak >NUL
-          powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-            "$resp = Invoke-WebRequest -Uri 'http://localhost:8082' -UseBasicParsing; " ^
-            "if ($resp.StatusCode -ne 200 -or -not $resp.Content.Contains('<h1>')) { Write-Error 'Bad response from CDN'; exit 1 }"
-          if %ERRORLEVEL% NEQ 0 (
-            echo Smoke test failed.
-            exit /b 1
-          ) else (
-            echo Smoke test passed.
-          )
+          Write-Host "Running HTTP smoke test..."
+          Start-Sleep -Seconds 3
+          $response = Invoke-WebRequest -Uri "http://localhost:8082" -UseBasicParsing
+          if ($response.StatusCode -ne 200) {
+            Write-Error "Unexpected HTTP code: $($response.StatusCode)"
+            exit 1
+          }
+          if (-not $response.Content.Contains("<h1>")) {
+            Write-Error "Response does not contain <h1>"
+            exit 1
+          }
+          Write-Host "Smoke test passed."
