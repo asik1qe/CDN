@@ -9,20 +9,22 @@ jobs:
   build-test-deploy:
     runs-on: self-hosted
 
+    defaults:
+      run:
+        shell: powershell -NoProfile -ExecutionPolicy Bypass
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 1. Проверка синтаксиса docker-compose.yaml
+      # 1. Проверка docker-compose.yaml
       - name: Validate docker-compose.yaml
-        shell: powershell
         run: |
           Write-Host "Validating docker-compose.yaml..."
           docker compose config
 
       # 2. Тестовый деплой для проверки docker-stack.yaml
       - name: Test deploy stack (validation only)
-        shell: powershell
         run: |
           Write-Host "Deploying test stack cdnstack-test..."
           docker stack deploy -c docker-stack.yaml cdnstack-test
@@ -31,23 +33,20 @@ jobs:
           Write-Host "Removing test stack..."
           docker stack rm cdnstack-test
 
-      # 3. Сборка Docker образов
+      # 3. Сборка Docker-образов
       - name: Build images
-        shell: powershell
         run: |
           Write-Host "Building Docker images..."
           docker compose build
 
-      # 4. Боевой деплой в Swarm
+      # 4. Боевой деплой
       - name: Deploy production stack
-        shell: powershell
         run: |
           Write-Host "Deploying production stack..."
           docker stack deploy -c docker-stack.yaml cdnstack
 
       # 5. Проверка реплик сервисов
       - name: Validate Swarm service replicas
-        shell: powershell
         run: |
           Write-Host "Checking replicas..."
           Start-Sleep -Seconds 5
@@ -62,16 +61,16 @@ jobs:
 
           Write-Host "All services have correct number of replicas."
 
-      # 6. HTTP Smoke Test
+      # 6. Проверка работы CDN (smoke test)
       - name: HTTP Smoke Test
-        shell: powershell
         run: |
           Write-Host "Running HTTP smoke test..."
           Start-Sleep -Seconds 3
+
           $response = Invoke-WebRequest -Uri "http://localhost:8082" -UseBasicParsing
-          
+
           if ($response.StatusCode -ne 200) {
-            Write-Error "Unexpected status code: $($response.StatusCode)"
+            Write-Error "Unexpected HTTP code: $($response.StatusCode)"
             exit 1
           }
 
