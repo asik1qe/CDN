@@ -1,0 +1,90 @@
+name: CDN CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}   # запуск вручную через GitHub
+
+jobs:
+  build-test-deploy:
+    runs-on: self-hosted   # наш локальный runner
+
+    steps:
+      # --- 1. Забираем код ---
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --- 2. Проверка синтаксиса docker-compose.yaml ---
+      - name: Validate docker-compose.yaml
+        shell: pwsh
+        run: |
+          Write-Host "Validating docker-compose.yaml..."
+          docker compose config
+
+      # --- 3. Проверка синтаксиса docker-stack.yaml через тестовый деплой ---
+      - name: Test deploy stack (validation only)
+        shell: pwsh
+        run: |
+          Write-Host "Deploying test stack cdnstack-test..."
+          docker stack deploy -c docker-stack.yaml cdnstack-test
+          
+          Write-Host "Checking test stack services..."
+          Start-Sleep -Seconds 5
+          $services = docker stack services cdnstack-test
+          Write-Host $services
+
+          Write-Host "Removing test stack..."
+          docker stack rm cdnstack-test
+
+      # --- 4. Сборка Docker образов ---
+      - name: Build images
+        shell: pwsh
+        run: |
+          Write-Host "Building Docker images..."
+          docker compose build
+
+      # --- 5. Деплой в Swarm-стек ---
+      - name: Deploy production stack
+        shell: pwsh
+        run: |
+          Write-Host "Deploying production Swarm stack..."
+          docker stack deploy -c docker-stack.yaml cdnstack
+
+      # --- 6. Проверка количества реплик (должно быть X/X) ---
+      - name: Validate Swarm service replicas
+        shell: pwsh
+        run: |
+          Write-Host "Checking replicas..."
+          Start-Sleep -Seconds 5
+          $services = docker stack services cdnstack --format '{{.Name}} {{.Replicas}}'
+          Write-Host $services
+
+          $bad = $services | Select-String " 0\/"
+          if ($bad) {
+            Write-Host "Services with missing replicas:"
+            $bad | ForEach-Object { Write-Host $_ }
+            exit 1
+          }
+
+          Write-Host "All services have the correct number of replicas."
+
+      # --- 7. HTTP Smoke Test для CDN через load balancer ---
+      - name: HTTP Smoke Test
+        shell: pwsh
+        run: |
+          Write-Host "Running HTTP smoke test..."
+          Start-Sleep -Seconds 3
+
+          $response = Invoke-WebRequest -Uri "http://localhost:8082" -UseBasicParsing
+          
+          if ($response.StatusCode -ne 200) {
+            Write-Error "Unexpected status code: $($response.StatusCode)"
+            exit 1
+          }
+
+          if (-not $response.Content.Contains("<h1>")) {
+            Write-Error "Page does not contain expected <h1> tag."
+            exit 1
+          }
+
+          Write-Host "Smoke test passed."
