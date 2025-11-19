@@ -1,0 +1,40 @@
+version: "3.9"
+
+services:
+  origin:
+    build:
+      context: ./origin
+    container_name: cdn-origin
+    ports:
+      - "8080:80"
+
+  edge1:
+    build:
+      context: ./edge
+    container_name: cdn-edge-1
+    ports:
+      - "8081:80"
+
+  edge2:
+    build:
+      context: ./edge
+    container_name: cdn-edge-2
+
+  load-balancer:
+    build:
+      context: ./load-balancer
+    container_name: cdn-lb
+    ports:
+      - "8082:80"
+
+  monitoring:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cdn-monitoring
+    ports:
+      - "8083:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro

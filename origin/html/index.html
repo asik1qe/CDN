@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>CDN галерея изображений</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            max-width: 1000px;
+            margin: 20px auto;
+            padding: 0 16px;
+        }
+        h1 {
+            margin-bottom: 8px;
+        }
+        p.desc {
+            color: #555;
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+        .gallery {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .photo {
+            width: calc(25% - 9px); /* 4 в ряд с зазором */
+            min-width: 180px;
+            box-sizing: border-box;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #ddd;
+            background: #fafafa;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .photo img {
+            display: block;
+            width: 100%;
+            height: 160px;
+            object-fit: cover;
+        }
+        .photo-caption {
+            padding: 6px 8px 8px;
+            font-size: 13px;
+            color: #444;
+        }
+        .controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+        button {
+            padding: 10px 18px;
+            border-radius: 6px;
+            border: none;
+            background: #2563eb;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        button:disabled {
+            background: #9ca3af;
+            cursor: default;
+        }
+        .hint {
+            font-size: 13px;
+            color: #666;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+<h1>Галерея изображений через CDN</h1>
+
+<div id="gallery" class="gallery"></div>
+
+<div class="controls">
+    <button id="loadMoreBtn" onclick="loadMore()">Показать ещё</button>
+    <div class="hint" id="hintText">
+        Сейчас отображается часть галереи. Нажмите «Показать ещё», чтобы загрузить дополнительные изображения.
+    </div>
+</div>
+
+<script>
+// Список путей к картинкам на origin-сервере
+// Файлы должны лежать в /usr/share/nginx/html/img/, т.е. локально в origin/html/img/
+const allImages = [
+    '/img/img1.jpg',
+    '/img/img2.jpg',
+    '/img/img3.jpg',
+    '/img/img4.jpg',
+    '/img/img5.jpg',
+    '/img/img6.jpg',
+    '/img/img7.jpg',
+    '/img/img8.jpg',
+    '/img/img9.jpg',
+    '/img/img10.jpg',
+    '/img/img11.jpg',
+    '/img/img12.jpg'
+];
+
+// Сколько изображений показываем за один шаг
+const BATCH_SIZE = 6;
+
+let shownCount = 0;
+const galleryEl = document.getElementById('gallery');
+const loadMoreBtn = document.getElementById('loadMoreBtn');
+const hintText = document.getElementById('hintText');
+
+function renderBatch() {
+    const nextImages = allImages.slice(shownCount, shownCount + BATCH_SIZE);
+
+    nextImages.forEach((src, index) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'photo';
+
+        const img = document.createElement('img');
+        img.src = src;
+        img.alt = 'Изображение ' + (shownCount + index + 1);
+
+        const caption = document.createElement('div');
+        caption.className = 'photo-caption';
+        caption.textContent = 'Изображение ' + (shownCount + index + 1);
+
+        wrapper.appendChild(img);
+        wrapper.appendChild(caption);
+        galleryEl.appendChild(wrapper);
+    });
+
+    shownCount += nextImages.length;
+
+    if (shownCount >= allImages.length) {
+        loadMoreBtn.disabled = true;
+        loadMoreBtn.textContent = 'Все изображения показаны';
+        hintText.textContent = 'Все изображения загружены из origin-сервера и могут кешироваться на CDN-узлах.';
+    } else {
+        hintText.textContent = 'Показано ' + shownCount + ' из ' + allImages.length + ' изображений. Нажмите «Показать ещё».';
+    }
+}
+
+function loadMore() {
+    renderBatch();
+}
+
+// При первой загрузке показываем первый набор
+renderBatch();
+</script>
+</body>
+</html>
